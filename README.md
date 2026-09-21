@@ -1,27 +1,26 @@
 # Football Analytics Platform
 
-An end-to-end football data platform built using Python, Azure SQL, GitHub Actions and Power BI.
+An end-to-end football data project built using Python, Azure SQL, GitHub Actions and Power BI.
 
-The project ingests football data from API-Football, stages and transforms it in Azure SQL, and presents the final data through an interactive Power BI dashboard covering league, team and player analysis.
+The project collects football data from API-Football, loads it into Azure SQL, transforms it into reporting tables, and uses Power BI for league, team and player analysis.
 
-The aim was to build more than a one-off dashboard and create a small data pipeline that could ingest changing data, update existing records and run automatically.
+The final dashboard covers the top three leagues in England, Spain, France and Germany, plus the top two leagues in Italy.
 
 ---
 
 ## Project Goal
 
-This project was built to demonstrate:
+The aim of this project was to build more than a one-off dashboard.
 
-- REST API ingestion with Python
-- Handling paginated API responses and rate limits
-- Staging raw data before loading reporting tables
-- Fact and dimension-style SQL modelling
-- Incremental updates using SQL `MERGE`
-- Cloud database hosting with Azure SQL
-- Scheduled ingestion with GitHub Actions
-- Power BI modelling and dashboard development
+I wanted to create a small data platform that could:
 
-The project is currently focused on Premier League data, with the ingestion structure designed so additional leagues and seasons can be added.
+- Pull data from a REST API
+- Handle pagination and API limits
+- Load raw data into staging tables
+- Transform data into fact and dimension tables
+- Update existing records instead of creating duplicates
+- Run ingestion through GitHub Actions
+- Feed a Power BI model from Azure SQL
 
 ---
 
@@ -32,7 +31,7 @@ API-Football
      ↓
 Python Ingestion
      ↓
-Azure SQL Staging Tables
+Azure SQL Staging
      ↓
 SQL MERGE / UPSERT
      ↓
@@ -41,85 +40,90 @@ Fact + Dimension Tables
 Power BI
 ```
 
-GitHub Actions is used to run the core ingestion process on a schedule.
-
 ---
 
-## Data Pipeline
+## Data Ingestion
 
-The ingestion layer is split into separate modules for:
+The ingestion layer is split into separate Python modules for different parts of the API, including:
 
 - Leagues
 - Teams
 - Fixtures
 - Standings
 - Players
+- Player match statistics
+- Match events
+- Lineups
+- Injuries
+- Transfers
 
-Each API response is transformed into a pandas DataFrame and loaded into staging tables in Azure SQL.
+Each API response is transformed with pandas and loaded into staging tables before being merged into the main reporting tables.
 
-SQL `MERGE` statements then update the reporting tables. This is useful for football data because records change over time. Fixtures move from scheduled to completed, standings change after each matchday and player season totals continue to increase.
+Because the full dataset covers multiple leagues and several detailed endpoints, the API request allowance was not enough to load everything in one run.
 
-Player ingestion is handled separately because the endpoint is paginated and requires multiple API calls. The script works through each page while adding delays and retry handling to stay within API limits.
+I therefore loaded the historical data in stages by changing the configured leagues and seasons between runs, while keeping the same ingestion and transformation process.
+
+This let me build a larger dataset without changing the overall pipeline design.
 
 ---
 
 ## Data Model
 
-The SQL layer uses separate tables for different levels of the data, including:
+The SQL layer separates data by grain rather than storing everything in one large table.
+
+Examples include:
 
 ```text
 dim_competition
 dim_team
+dim_player
 dim_date
 
 fact_match
 fact_standing
+fact_player_season
+fact_player_match
+fact_player_event
 ```
 
-Player data is also modelled for player and player-season analysis.
+This made it easier to build relationships in Power BI and work with league, match and player-level data in the same model.
 
-The main grains are:
+SQL `MERGE` statements are used to update existing records where possible.
 
-- **Match** – one row per fixture
-- **Standing** – one row per team, competition and season
-- **Player** – one row per player
-- **Player Season** – one row per player, competition and season
-
-Separating the data by grain makes it easier to build reliable relationships and measures in Power BI.
+This is useful for football data because fixtures, standings and player statistics change throughout a season.
 
 ---
 
 ## Power BI Dashboard
 
-The reporting layer contains three main pages.
+The dashboard is split into three main areas.
 
 ### Overview
 
-A league-level view containing:
+A league-level view showing areas such as:
 
 - League standings
 - Top scorers and assists
 - Player ratings
 - Cards
 - Team goals
-- Passing statistics
-- Shooting statistics
+- Passing
+- Shooting
 
 ### Team Breakdown
 
-Allows a team to be selected and analysed in more detail, including:
+Allows a selected team to be analysed in more detail, including:
 
 - Results
 - Points progression
 - Squad statistics
 - Player appearances
-- Individual player performance
+- Player performance
 
 ### Player Comparison
 
 Allows two players to be compared across areas such as:
 
-- Appearances and minutes
 - Goals and assists
 - Ratings
 - Passing
@@ -135,15 +139,15 @@ The Power BI file is stored in the `dashboard` folder.
 
 ## Tech Stack
 
-- **Python** – API ingestion and pipeline orchestration
-- **Pandas** – transforming API responses
-- **Requests** – REST API communication
-- **SQLAlchemy / PyODBC** – Azure SQL connectivity
-- **Azure SQL Database** – cloud data storage
-- **SQL** – schema design and incremental upserts
-- **GitHub Actions** – scheduled ingestion
-- **Power BI** – analytics and visualisation
-- **Git / GitHub** – source control
+- **Python** - API ingestion and orchestration
+- **Pandas** - transforming API responses
+- **Requests** - API communication
+- **SQLAlchemy / PyODBC** - database connectivity
+- **Azure SQL Database** - cloud data storage
+- **SQL** - modelling and upserts
+- **GitHub Actions** - scheduled ingestion
+- **Power BI** - reporting and analysis
+- **Git / GitHub** - source control
 
 ---
 
@@ -154,25 +158,15 @@ Football-Analytics-Platform/
 │
 ├── .github/
 │   └── workflows/
-│       └── ingest.yml
 │
 ├── dashboard/
 │   └── Football Analytics Dashboard.pbix
 │
 ├── db/
-│   ├── schema.sql
-│   └── merge_upserts.sql
+│   └── SQL schema and merge scripts
 │
 ├── ingestion/
-│   ├── config.py
-│   ├── daily_ingest.py
-│   ├── fetch_fixtures.py
-│   ├── fetch_leagues.py
-│   ├── fetch_players.py
-│   ├── fetch_standings.py
-│   ├── fetch_teams.py
-│   ├── requirements.txt
-│   └── utils.py
+│   └── Python ingestion modules
 │
 └── README.md
 ```
@@ -188,78 +182,80 @@ git clone https://github.com/ThomasMillar/Football-Analytics-Platform.git
 cd Football-Analytics-Platform
 ```
 
-Install dependencies:
+Install the required packages:
 
 ```bash
 pip install -r ingestion/requirements.txt
 ```
 
-Configure the required environment variables:
-
-```env
-API_FOOTBALL_KEY=your_api_key
-AZURE_SQL_CXN=your_connection_string
-LEAGUE_ID=39
-SEASON=2024
-```
-
-Run the core ingestion pipeline:
+Set the required environment variables for the API and Azure SQL connection, then run the ingestion pipeline:
 
 ```bash
 python -m ingestion.daily_ingest
 ```
 
-Player ingestion can be run separately when required.
+API keys and database credentials are kept outside the repository.
 
 ---
 
 ## What I Learned
 
-This project taught me different lessons from my UK Housing Data Platform because the source data comes from a live external API rather than large static files.
+This project taught me a lot about working with APIs compared with static files.
 
-### Designing around API limitations
+### API limits affect pipeline design
 
-I had to account for authentication, pagination, rate limits, retries and failed requests rather than assuming the entire dataset would always be available at once.
+The biggest challenge was the amount of data I wanted to collect.
 
-The player endpoint in particular showed me how API limits can directly affect pipeline design.
+Once player stats, events, lineups, injuries and transfers were included across several leagues, the number of API requests became too large for one load.
 
-### Understanding data grain
+I had to break the ingestion into stages by league and season.
 
-Football data exists at different levels. Matches, standings and player statistics cannot all be treated as the same type of dataset.
+This helped me understand that the limits of a source system can change how a pipeline needs to be designed.
 
-This project helped me understand why defining the grain of a fact table before loading data is important.
+### Data grain matters
 
-### Using staging tables
+Football data exists at several different levels.
 
-Loading API responses into staging tables before updating the final model made the pipeline easier to debug and gave me a clear separation between extracted data and reporting data.
+A fixture, a league table row and a player season record all represent different things.
 
-### Incremental loading
+Separating these into different fact and dimension tables made the model easier to understand and made the Power BI relationships more reliable.
 
-Using SQL `MERGE` statements helped me understand how to update records that change over time rather than repeatedly inserting duplicates or rebuilding the whole dataset.
+### Staging tables make debugging easier
 
-### Moving from scripts to automation
+Loading API data into staging tables first gave me a clear point where I could check what had been extracted before updating the main tables.
 
-Running ingestion through GitHub Actions exposed problems that were easy to miss when running scripts manually, particularly around configuration, credentials, dependencies and database connectivity.
+This was useful when dealing with changing API responses or failed loads.
 
-It helped turn the project from a set of Python scripts into a more complete pipeline.
+### Incremental updates are better than rebuilding everything
+
+Football data changes regularly.
+
+Fixtures move from scheduled to completed, standings update after every matchday and player totals change throughout the season.
+
+Using upserts helped me keep records current without repeatedly inserting duplicates.
+
+### Automation is different from running a script manually
+
+Moving ingestion into GitHub Actions meant the project had to work without relying on my local machine.
+
+That made me think more about environment variables, dependencies, secrets and database connectivity.
 
 ---
 
 ## Future Improvements
 
-- Add player ingestion to the main scheduled pipeline
-- Expand to additional leagues and seasons
 - Add automated data quality checks
-- Add pipeline logging and monitoring
-- Add automated tests for transformation logic
+- Add better pipeline logging
+- Add tests for transformation logic
+- Add failure notifications
+- Add more historical seasons
 - Improve Power BI measures with more per-90 statistics
-- Add historical season comparisons
 - Publish a public-facing version of the dashboard
 
 ---
 
 ## Summary
 
-This project combines API ingestion, Python, Azure SQL, incremental SQL transformations, scheduled workflows and Power BI in one end-to-end platform.
+This project combines API ingestion, Python, Azure SQL, SQL transformations, GitHub Actions and Power BI in one end-to-end workflow.
 
-The main focus was learning how the different parts of a data pipeline work together, particularly how API limitations affect ingestion, how database design affects reporting and how automation changes the requirements of a pipeline.
+The main thing I gained from building it was a better understanding of how API limits, database design and automation all affect the way a data pipeline needs to be built.
